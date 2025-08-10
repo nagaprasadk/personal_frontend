@@ -16,4 +16,4 @@ COPY . .
 EXPOSE 80
 
 # Run Streamlit app on container start
-CMD ["streamlit", "run", "your_script.py", "--server.port=80", "--server.enableCORS=false", "--server.headless=true"]
+CMD ["streamlit", "run", "frontend.py", "--server.port=80", "--server.enableCORS=false", "--server.headless=true"]
