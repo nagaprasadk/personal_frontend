@@ -4,43 +4,60 @@ import json
 from typing import List, Tuple
 from dotenv import load_dotenv
 import streamlit as st
-import openai
 import numpy as np
 from azure.cosmos import CosmosClient, exceptions as cosmos_exceptions
 from PyPDF2 import PdfReader
-from openai import OpenAI
+from openai import AzureOpenAI
 
 # ----------------------------
 # Load environment variables
 # ----------------------------
 load_dotenv()
-client = OpenAI()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-3.5-turbo")  # change to your preferred chat model
+# Azure OpenAI Chat Model Config
+AZURE_OPENAI_API_KEY_CHAT = os.getenv("AZURE_OPENAI_API_KEY_CHAT")
+AZURE_OPENAI_ENDPOINT_CHAT = os.getenv("AZURE_OPENAI_ENDPOINT_CHAT")
+AZURE_OPENAI_API_VERSION_CHAT = os.getenv("AZURE_OPENAI_API_VERSION_CHAT")
+AZURE_OPENAI_CHAT_DEPLOYMENT = os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT")
 
-# Hardcode correct Cosmos DB URI here for testing
+# Azure OpenAI Embedding Model Config
+AZURE_OPENAI_API_KEY_EMBED = os.getenv("AZURE_OPENAI_API_KEY_EMBED")
+AZURE_OPENAI_ENDPOINT_EMBED = os.getenv("AZURE_OPENAI_ENDPOINT_EMBED")
+AZURE_OPENAI_API_VERSION_EMBED = os.getenv("AZURE_OPENAI_API_VERSION_EMBED")
+AZURE_OPENAI_EMBED_DEPLOYMENT = os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT")
+
+# Cosmos DB Config
 COSMOS_URI = "https://my-cosmosdb-rag001.documents.azure.com:443/"
 COSMOS_KEY = os.getenv("COSMOS_KEY")
 COSMOS_DB = os.getenv("COSMOS_DATABASE", "ragstore")
 COSMOS_CONTAINER = os.getenv("COSMOS_CONTAINER", "vectors")
 
 # Basic checks
-if not OPENAI_API_KEY:
-    st.error("OPENAI_API_KEY missing in .env")
+missing_vars = []
+if not AZURE_OPENAI_API_KEY_CHAT: missing_vars.append("AZURE_OPENAI_API_KEY_CHAT")
+if not AZURE_OPENAI_API_KEY_EMBED: missing_vars.append("AZURE_OPENAI_API_KEY_EMBED")
+if not COSMOS_KEY: missing_vars.append("COSMOS_KEY")
+if missing_vars:
+    st.error(f"Missing environment variables: {', '.join(missing_vars)}")
     st.stop()
-
-if not COSMOS_KEY:
-    st.error("COSMOS_KEY missing in .env")
-    st.stop()
-
-# openai.api_key = OPENAI_API_KEY
-
-st.write("Connecting to Cosmos DB at:", COSMOS_URI)
 
 # ----------------------------
-# Cosmos Client initialization (handles sdk variations)
+# Initialize Azure OpenAI Clients
+# ----------------------------
+chat_client = AzureOpenAI(
+    api_key=AZURE_OPENAI_API_KEY_CHAT,
+    api_version=AZURE_OPENAI_API_VERSION_CHAT,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT_CHAT
+)
+
+embed_client = AzureOpenAI(
+    api_key=AZURE_OPENAI_API_KEY_EMBED,
+    api_version=AZURE_OPENAI_API_VERSION_EMBED,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT_EMBED
+)
+
+# ----------------------------
+# Cosmos Client initialization
 # ----------------------------
 def make_cosmos_client(uri: str, key: str) -> CosmosClient:
     try:
@@ -58,7 +75,7 @@ except Exception as e:
     st.error(f"Failed to connect to Cosmos DB: {e}")
     st.stop()
 
-# get database & container clients (create if not exists)
+# Get database & container clients (create if not exists)
 try:
     db = cosmos_client.create_database_if_not_exists(id=COSMOS_DB)
     container = db.create_container_if_not_exists(
@@ -70,13 +87,9 @@ except cosmos_exceptions.CosmosHttpResponseError as e:
     st.error(f"Error accessing/creating DB or container: {e}")
     st.stop()
 
-# The rest of your helper functions and UI remain unchanged
-# (Include the same code as before for pdf_to_text, chunk_text, embed_text, etc.)
-
-# ... [Same helper functions as before] ...
-
-# For brevity, I’ll paste the unchanged parts here:
-
+# ----------------------------
+# Helper functions
+# ----------------------------
 def pdf_to_text(file_bytes) -> List[Tuple[int, str]]:
     reader = PdfReader(file_bytes)
     pages = []
@@ -104,12 +117,11 @@ def chunk_text(text: str, max_chars: int = 1000, overlap: int = 200) -> List[str
     return chunks
 
 def embed_text(text: str) -> List[float]:
-    response = client.embeddings.create(
-        model="text-embedding-ada-002",
+    response = embed_client.embeddings.create(
+        model=AZURE_OPENAI_EMBED_DEPLOYMENT,
         input=text
     )
-    embedding = response.data[0].embedding
-    return embedding
+    return response.data[0].embedding
 
 def upsert_chunk_to_cosmos(text: str, emb: List[float], metadata: dict):
     item = {
@@ -187,8 +199,8 @@ def answer_with_context(query: str, top_k: int = 5):
         f"Context:\n{context}\n\nQuestion: {query}\n\nAnswer:"
     )
     try:
-        resp = client.chat.completions.create(
-            model=CHAT_MODEL,
+        resp = chat_client.chat.completions.create(
+            model=AZURE_OPENAI_CHAT_DEPLOYMENT,
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that answers using provided context."},
                 {"role": "user", "content": prompt}
@@ -198,11 +210,9 @@ def answer_with_context(query: str, top_k: int = 5):
         )
         answer = resp.choices[0].message.content
     except Exception as e:
-        # No fallback to old openai.Completion, just raise error or handle differently
-        st.error(f"OpenAI API error: {e}")
-        answer = "Error fetching answer from OpenAI."
+        st.error(f"Azure OpenAI API error: {e}")
+        answer = "Error fetching answer from Azure OpenAI."
     return answer, sources
-
 
 # ----------------------------
 # Streamlit UI
@@ -245,7 +255,7 @@ with tab2:
         if not q.strip():
             st.warning("Please enter a question.")
         else:
-            with st.spinner("Searching and calling OpenAI..."):
+            with st.spinner("Searching and calling Azure OpenAI..."):
                 answer, sources = answer_with_context(q.strip(), top_k=top_k)
             st.subheader("Answer")
             st.write(answer)
