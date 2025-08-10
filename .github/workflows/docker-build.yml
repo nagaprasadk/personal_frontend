@@ -1,0 +1,35 @@
+name: Build and Deploy to Azure
+
+on:
+  push:
+    branches:
+      - master  # or 'main', whichever your default branch is
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t nagaprasadk/image_frontend_simpleproject:latest .
+          docker push nagaprasadk/image_frontend_simpleproject:latest
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Web App for Containers
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: frontend-app-npk123
+          images: nagaprasadk/image_frontend_simpleproject:latest

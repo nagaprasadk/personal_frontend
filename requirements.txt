@@ -1,0 +1,6 @@
+streamlit
+openai
+azure-cosmos
+PyPDF2
+python-dotenv
+numpy
