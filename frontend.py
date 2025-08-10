@@ -25,8 +25,9 @@ COSMOS_KEY = os.getenv("COSMOS_KEY")
 COSMOS_DB = os.getenv("COSMOS_DATABASE", "ragstore")
 COSMOS_CONTAINER = os.getenv("COSMOS_CONTAINER", "vectors")
 
-client = OpenAI()
-OpenAI.api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(
+    api_key = os.getenv("OPENAI_API_KEY"),
+)
 
 # Basic checks
 if not OPENAI_API_KEY:
