@@ -14,6 +14,7 @@ from openai import OpenAI
 # Load environment variables
 # ----------------------------
 load_dotenv()
+client = OpenAI()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
@@ -25,10 +26,6 @@ COSMOS_KEY = os.getenv("COSMOS_KEY")
 COSMOS_DB = os.getenv("COSMOS_DATABASE", "ragstore")
 COSMOS_CONTAINER = os.getenv("COSMOS_CONTAINER", "vectors")
 
-client = OpenAI(
-    api_key = os.getenv("OPENAI_API_KEY"),
-)
-
 # Basic checks
 if not OPENAI_API_KEY:
     st.error("OPENAI_API_KEY missing in .env")
@@ -38,7 +35,7 @@ if not COSMOS_KEY:
     st.error("COSMOS_KEY missing in .env")
     st.stop()
 
-openai.api_key = OPENAI_API_KEY
+# openai.api_key = OPENAI_API_KEY
 
 st.write("Connecting to Cosmos DB at:", COSMOS_URI)
 
@@ -254,4 +251,4 @@ with tab2:
             st.write(answer)
             st.subheader("Sources (top matches)")
             for s in sources:
-                st.markdown(f"- score **{s['score']:.4f}**, metadata: `{json.dumps(s['metadata'])}`")
+                st.markdown(f"- score **{s['score']:.4f}**, metadata: {json.dumps(s['metadata'])}")
